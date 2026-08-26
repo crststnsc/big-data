@@ -1,16 +1,3 @@
-"""Validate an RSS feed config before wiring it into a DAG.
-
-RSS URLs rot constantly -- sites migrate, drop feeds, or move them without
-redirects. Run this first so you find dead feeds in 30 seconds rather than
-inside a failing Airflow task.
-
-    pip install feedparser requests
-    python validate_feeds.py feeds.json
-    python validate_feeds.py feeds.json --write-clean feeds.clean.json
-
-Reports per feed: HTTP status, entry count, whether entries carry full text
-(content:encoded) or only a short summary, and a sample title.
-"""
 from __future__ import annotations
 
 import argparse
@@ -27,7 +14,6 @@ TIMEOUT = 20
 
 
 def probe(feed: dict) -> dict:
-    """Fetch and parse one feed; never raises."""
     out = {**feed, "ok": False, "status": None, "entries": 0,
            "has_full_text": False, "avg_summary_chars": 0,
            "sample": None, "error": None}

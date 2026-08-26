@@ -1,0 +1,476 @@
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #666;
+  --border: #ddd;
+  --accent: #2563eb;
+  --card-bg: #fafafa;
+  --tag-bg: #eef2ff;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Chart palette (dataviz skill reference order: blue, orange, aqua, yellow, ...).
+     Two different mappings of quad_class exist on purpose: the pie chart is an
+     "adjacent" context (like an unrolled stacked bar) where all 4 fixed slots
+     are CVD-safe; the map is a "scatter" context where the same skill's own
+     validation caps safe simultaneous hues at 3 -- so the map instead colors
+     by quad_class's real cooperation(1,2)/conflict(3,4) structure using the
+     2-hue diverging pair, which is both fully safe and a better map story. */
+  --chart-gdelt: #2a78d6;       /* categorical slot 1 (blue) */
+  --chart-rss: #eb6834;         /* categorical slot 2 (orange) */
+  --quad-pie-1: #2a78d6;        /* slot 1 blue   - Verbal Cooperation */
+  --quad-pie-2: #eb6834;        /* slot 2 orange - Material Cooperation */
+  --quad-pie-3: #1baf7a;        /* slot 3 aqua   - Verbal Conflict */
+  --quad-pie-4: #eda100;        /* slot 4 yellow - Material Conflict */
+  --map-cooperation: #2a78d6;   /* diverging pole: quad_class 1-2 */
+  --map-conflict: #e34948;      /* diverging pole: quad_class 3-4 */
+  --chart-bar-1: #2a78d6;       /* single-hue bar, event_root_code */
+  --chart-bar-2: #1baf7a;       /* single-hue bar, language (distinct chart, still one hue each) */
+  --chart-line: #2a78d6;        /* avg_tone trend line */
+  --chart-gridline: #e1e0d9;
+  --chart-baseline: #c3c2b7;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121212;
+    --fg: #eaeaea;
+    --muted: #999;
+    --border: #333;
+    --accent: #60a5fa;
+    --card-bg: #1c1c1c;
+    --tag-bg: #1e293b;
+
+    --chart-gdelt: #3987e5;
+    --chart-rss: #d95926;
+    --quad-pie-1: #3987e5;
+    --quad-pie-2: #d95926;
+    --quad-pie-3: #199e70;
+    --quad-pie-4: #c98500;
+    --map-cooperation: #3987e5;
+    --map-conflict: #e66767;
+    --chart-bar-1: #3987e5;
+    --chart-bar-2: #199e70;
+    --chart-line: #3987e5;
+    --chart-gridline: #2c2c2a;
+    --chart-baseline: #383835;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+a {
+  color: var(--accent);
+}
+
+.app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 1.5rem 3rem;
+}
+
+.app-header h1 {
+  font-size: 1.4rem;
+  padding: 1.5rem 0 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.search-bar {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1.5rem 0;
+}
+
+.search-bar input {
+  flex: 1;
+  padding: 0.6rem 0.8rem;
+  font-size: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.search-bar button {
+  padding: 0.6rem 1.2rem;
+  font-size: 1rem;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+}
+
+.search-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 700px) {
+  .search-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.filter-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  position: sticky;
+  top: 1rem;
+}
+
+.filter-group {
+  margin-bottom: 1.2rem;
+}
+
+.filter-group h4 {
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.filter-group label {
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+  cursor: pointer;
+}
+
+.filter-group input[type="text"],
+.filter-group input[type="date"] {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  margin-bottom: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.clear-filters {
+  width: 100%;
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.result-count {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 0.8rem;
+}
+
+.result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.result-card {
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  background: var(--card-bg);
+  text-decoration: none;
+  color: var(--fg);
+}
+
+.result-card:hover {
+  border-color: var(--accent);
+}
+
+.result-card h3 {
+  margin: 0.4rem 0;
+  font-size: 1.05rem;
+}
+
+.result-card .snippet {
+  margin: 0.3rem 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+}
+
+.badge-event {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.badge-article {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-top: 0.4rem;
+}
+
+.tag {
+  background: var(--tag-bg);
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+}
+
+mark {
+  background: #fde68a;
+  color: inherit;
+  padding: 0 0.1rem;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  justify-content: center;
+}
+
+.pagination button {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.pagination button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.status-message {
+  color: var(--muted);
+  padding: 2rem 0;
+  text-align: center;
+}
+
+.status-message.error {
+  color: #b91c1c;
+}
+
+/* Detail page */
+
+.detail-page {
+  padding-top: 1.5rem;
+}
+
+.back-link {
+  display: inline-block;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.detail-page h1 {
+  font-size: 1.5rem;
+  margin: 0.6rem 0;
+}
+
+.article-body {
+  margin: 1.2rem 0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.gdelt-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 1rem;
+  margin: 1.2rem 0;
+}
+
+.gdelt-facts dt {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.gdelt-facts dd {
+  margin: 0;
+}
+
+.entities-block {
+  margin: 1rem 0;
+}
+
+.entities-block h4 {
+  margin: 0 0 0.4rem;
+  font-size: 0.9rem;
+}
+
+.entity-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.entity-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  min-width: 90px;
+}
+
+/* Nav */
+
+.app-nav {
+  display: flex;
+  gap: 1.2rem;
+  padding: 0.6rem 0 0;
+}
+
+.app-nav a {
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.app-nav a:hover,
+.app-nav a.active {
+  color: var(--fg);
+}
+
+/* Dashboard */
+
+.dashboard-page {
+  padding-top: 1.5rem;
+}
+
+.stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-tile {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+  padding: 1rem;
+  text-align: center;
+}
+
+.stat-tile .value {
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.stat-tile .label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 0.2rem;
+}
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 1.2rem;
+}
+
+.chart-section {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+  padding: 1rem;
+}
+
+.chart-section h3 {
+  margin: 0 0 0.8rem;
+  font-size: 0.95rem;
+}
+
+.chart-section.wide {
+  grid-column: 1 / -1;
+}
+
+/* Map */
+
+.map-page {
+  padding-top: 1.5rem;
+}
+
+.map-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 700px) {
+  .map-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.map-container {
+  height: 600px;
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.map-popup dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.map-popup dd {
+  margin: 0 0 0.3rem;
+}
+
+.map-legend {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin-top: 0.6rem;
+}
+
+.map-legend .swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 0.3rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  /* OSM tiles are light-only (no free dark tile server); invert so the map
+     doesn't glare against the rest of a dark-mode page. */
+  .leaflet-tile-pane {
+    filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9);
+  }
+}

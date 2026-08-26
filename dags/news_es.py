@@ -1,13 +1,3 @@
-"""Elasticsearch index definition + bulk loader for GDELT v2 events and RSS
-feed articles, sharing one index so both can be queried/searched together.
-
-Run directly to (re)create the index:
-    python news_es.py --recreate
-    python news_es.py --load /path/to/20260822123000.csv
-
-Import from the Airflow DAGs for the indexing tasks:
-    from news_es import bulk_index_file, bulk_index_rss_docs, rss_entry_to_doc
-"""
 from __future__ import annotations
 
 import argparse
@@ -15,6 +5,7 @@ import csv
 import logging
 import os
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Iterable, Iterator
 from urllib.parse import urlparse
@@ -68,34 +59,28 @@ INDEX_SETTINGS = {
     "mappings": {
         "dynamic": "strict",
         "properties": {
-            # --- identity / provenance
             "type": {"type": "keyword"},
             "ingested_at": {"type": "date"},
             "interval_ts": {"type": "keyword"},
 
-            # --- time
             "seen_at": {"type": "date"},        # GDELT: DATEADDED
             "content_date": {"type": "date"},   # GDELT: Day | RSS: entry published/updated date
 
-            # --- source article
             "url": {"type": "keyword"},
             "domain": {"type": "keyword"},
 
-            # --- CAMEO codes (keyword: exact-match filters + terms aggregations)
             "event_code": {"type": "keyword"},
             "event_base_code": {"type": "keyword"},
             "event_root_code": {"type": "keyword"},
             "quad_class": {"type": "integer"},
             "is_root_event": {"type": "boolean"},
 
-            # --- numeric metrics (dashboards)
             "goldstein": {"type": "float"},
             "avg_tone": {"type": "float"},
             "num_mentions": {"type": "integer"},
             "num_sources": {"type": "integer"},
             "num_articles": {"type": "integer"},
 
-            # --- actors (the graph edges)
             "actor1": {
                 "type": "text",
                 "analyzer": "content_analyzer",
@@ -109,7 +94,6 @@ INDEX_SETTINGS = {
             "actor1_country": {"type": "keyword"},
             "actor2_country": {"type": "keyword"},
 
-            # --- geography (the map)
             "place": {
                 "type": "text",
                 "analyzer": "content_analyzer",
@@ -120,15 +104,12 @@ INDEX_SETTINGS = {
             "geo_type": {"type": "integer"},
             "location": {"type": "geo_point"},
 
-            # --- article content. For GDELT this is populated by a later
-            # fetch/enrich stage (fields declared now so that doesn't require
-            # a reindex); for RSS it's populated directly from the feed entry
-            # at ingest time, when the feed provides it.
             "title": {"type": "text", "analyzer": "content_analyzer"},
             "content": {"type": "text", "analyzer": "content_analyzer"},
             "summary": {"type": "text", "analyzer": "content_analyzer"},
             "language": {"type": "keyword"},
             "fetch_status": {"type": "keyword"},  # ok | failed | pending
+            
             "entities": {
                 "properties": {
                     "persons": {"type": "keyword"},
@@ -136,8 +117,17 @@ INDEX_SETTINGS = {
                     "locations": {"type": "keyword"},
                 }
             },
+            
+            "entities_en": {
+                "properties": {
+                    "persons": {"type": "keyword"},
+                    "organizations": {"type": "keyword"},
+                    "locations": {"type": "keyword"},
+                }
+            },
+            
+            "enriched_at": {"type": "date"},
 
-            # --- RSS-specific (source feed metadata; sparse on GDELT docs)
             "feed_name": {"type": "keyword"},
             "feed_category": {"type": "keyword"},
             "source_country": {"type": "keyword"},
@@ -160,7 +150,8 @@ def ensure_index(es: Elasticsearch, recreate: bool = False) -> None:
         es.indices.create(index=INDEX_NAME, **INDEX_SETTINGS)
         logger.info("Created index %s", INDEX_NAME)
     else:
-        logger.info("Index %s already exists", INDEX_NAME)
+        es.indices.put_mapping(index=INDEX_NAME, properties=INDEX_SETTINGS["mappings"]["properties"])
+        logger.info("Index %s already exists; mapping is up to date", INDEX_NAME)
 
 
 # ---------------------------------------------------------------------------
@@ -197,8 +188,29 @@ def _date(value: str | None, fmt: str) -> str | None:
         return None
 
 
+class _TextExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self._parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self._parts.append(data)
+
+    def text(self) -> str:
+        return " ".join(self._parts)
+
+
+def _strip_html(value: str | None) -> str | None:
+    v = _s(value)
+    if not v:
+        return None
+    parser = _TextExtractor()
+    parser.feed(v)
+    text = " ".join(parser.text().split())
+    return text or None
+
+
 def row_to_doc(row: dict, interval_ts: str) -> dict | None:
-    """Normalize one raw GDELT row. Returns None for rows we cannot use."""
     event_id = _s(row.get("GlobalEventID"))
     url = _s(row.get("SOURCEURL"))
     if not event_id or not url:
@@ -269,8 +281,6 @@ def iter_docs(path: Path, interval_ts: str) -> Iterator[dict]:
 
 
 def bulk_index_actions(actions: Iterable[dict], es: Elasticsearch | None = None) -> dict:
-    """Shared bulk-load + error-reporting path for any source's pre-built
-    bulk actions (GDELT rows, RSS entries, ...)."""
     es = es or get_client()
     ensure_index(es)
 
@@ -295,16 +305,13 @@ def bulk_index_file(path: str | Path, interval_ts: str, es: Elasticsearch | None
 # ---------------------------------------------------------------------------
 
 def rss_entry_to_doc(entry: dict, feed: dict, batch_ts: str) -> dict | None:
-    """Normalize one feedparser entry. Returns None for entries we cannot use."""
     link = entry.get("link")
     guid = _s(entry.get("id")) or link
     if not guid or not link:
         return None
 
-    # feedparser exposes full article body (e.g. RSS content:encoded, Atom
-    # content) as a list; take the first value when a feed provides it.
     content_entries = entry.get("content")
-    content = _s(content_entries[0].get("value")) if content_entries else None
+    content = _strip_html(content_entries[0].get("value")) if content_entries else None
 
     published_struct = entry.get("published_parsed") or entry.get("updated_parsed")
     content_date = (
@@ -320,7 +327,7 @@ def rss_entry_to_doc(entry: dict, feed: dict, batch_ts: str) -> dict | None:
         "url": link,
         "domain": urlparse(link).netloc or None,
         "title": _s(entry.get("title")),
-        "summary": _s(entry.get("summary")),
+        "summary": _strip_html(entry.get("summary")),
         "content": content,
         "language": _s(feed.get("language")),
         # a feed that ships full content:encoded needs no later enrich pass;
@@ -347,6 +354,87 @@ def bulk_index_rss_docs(docs: list[dict], es: Elasticsearch | None = None) -> di
     return stats
 
 
+def backfill_strip_html(es: Elasticsearch | None = None) -> dict:
+    from elasticsearch.helpers import scan
+
+    es = es or get_client()
+    hits = scan(
+        es, index=INDEX_NAME, query={"query": {"term": {"type": "rss_article"}}},
+        _source=["content", "summary", "title", "language", "entities", "fetch_status"],
+    )
+
+    counts = {"scanned": 0, "text_changed": 0, "entities_reextracted": 0}
+
+    def actions():
+        for hit in hits:
+            counts["scanned"] += 1
+            src = hit["_source"]
+            clean_content = _strip_html(src.get("content"))
+            clean_summary = _strip_html(src.get("summary"))
+
+            doc_update = {}
+            if clean_content != src.get("content"):
+                doc_update["content"] = clean_content
+            if clean_summary != src.get("summary"):
+                doc_update["summary"] = clean_summary
+
+            if not clean_content and src.get("fetch_status") == "ok":
+                doc_update["fetch_status"] = "pending"
+
+            if not doc_update:
+                continue
+            counts["text_changed"] += 1
+
+            if src.get("entities") is not None:
+                from nlp_enrich import extract_entities, translate_entities
+
+                lang = src.get("language")
+                text = clean_content or clean_summary or src.get("title") or ""
+                entities = extract_entities(text, lang) if lang and text else None
+                if entities is not None:
+                    doc_update["entities"] = entities
+                    doc_update["entities_en"] = translate_entities(entities, lang)
+                    counts["entities_reextracted"] += 1
+
+            yield {"_op_type": "update", "_index": INDEX_NAME, "_id": hit["_id"], "doc": doc_update}
+
+    stats = bulk_index_actions(actions(), es)
+    stats.update(counts)
+    logger.info("HTML backfill: %s", stats)
+    return stats
+
+
+def backfill_fetch_status(es: Elasticsearch | None = None) -> dict:
+    es = es or get_client()
+
+    to_ok = es.update_by_query(
+        index=INDEX_NAME,
+        query={
+            "bool": {
+                "filter": [{"exists": {"field": "enriched_at"}}, {"exists": {"field": "entities"}}],
+                "must_not": [{"term": {"fetch_status": "ok"}}],
+            }
+        },
+        script={"source": "ctx._source.fetch_status = 'ok'"},
+    )
+    to_failed = es.update_by_query(
+        index=INDEX_NAME,
+        query={
+            "bool": {
+                "filter": [{"term": {"type": "rss_article"}}, {"exists": {"field": "enriched_at"}}],
+                "must_not": [
+                    {"exists": {"field": "entities"}},
+                    {"terms": {"fetch_status": ["ok", "failed"]}},
+                ],
+            }
+        },
+        script={"source": "ctx._source.fetch_status = 'failed'"},
+    )
+    stats = {"marked_ok": to_ok["updated"], "marked_failed": to_failed["updated"]}
+    logger.info("fetch_status backfill: %s", stats)
+    return stats
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     p = argparse.ArgumentParser(description=__doc__)
@@ -354,9 +442,17 @@ def main() -> None:
     p.add_argument("--load", help="Path to a filtered/raw GDELT TSV to bulk load")
     p.add_argument("--interval-ts", default="manual", help="Interval tag stored on each doc")
     p.add_argument("--count", action="store_true", help="Print current doc count")
+    p.add_argument(
+        "--backfill-html", action="store_true",
+        help="Strip HTML from already-stored RSS content/summary and re-extract entities where affected",
+    )
+    p.add_argument(
+        "--backfill-fetch-status", action="store_true",
+        help="Bring fetch_status in line with already-stored entities for previously-enriched docs",
+    )
     args = p.parse_args()
 
-    es = get_client() 
+    es = get_client()
     info = es.info()
     print(f"Connected to ES {info['version']['number']} at {ES_URL}")
 
@@ -367,6 +463,12 @@ def main() -> None:
 
     if args.load:
         print(bulk_index_file(args.load, args.interval_ts, es))
+
+    if args.backfill_html:
+        print(backfill_strip_html(es))
+
+    if args.backfill_fetch_status:
+        print(backfill_fetch_status(es))
 
     if args.count or args.load:
         print(f"{INDEX_NAME} doc count: {es.count(index=INDEX_NAME)['count']}")

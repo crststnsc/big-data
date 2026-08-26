@@ -1,14 +1,3 @@
-"""
-Every hour, fetch all feeds listed in feeds.clean.json concurrently and
-bulk-index their entries into Elasticsearch alongside GDELT events (see
-news_es.py for the shared mapping).
-
-Single batched task by design: with ~190 external feeds, dynamic per-feed
-task mapping would create ~190 task instances every run. A thread pool
-inside one task gets the same concurrency with far less Airflow overhead;
-the cost is that a per-feed failure is only visible in this task's log, not
-as its own task instance, and a task-level retry re-fetches every feed.
-"""
 from __future__ import annotations
 
 import json
@@ -28,7 +17,6 @@ USER_AGENT = "Mozilla/5.0 (compatible; NewsPipelineBot/1.0; +https://airflow.apa
 
 
 def fetch_feed(feed: dict) -> tuple[dict, list, str | None]:
-    """Fetch and parse one feed. Returns (feed, entries, error)."""
     import feedparser
 
     try:

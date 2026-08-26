@@ -1,15 +1,3 @@
-"""
-Every 15 minutes, download the GDELT v2 event export file for the interval
-that just closed and stage the full CSV on disk (with real column names) for
-a downstream ingestion task to load into a database.
-
-Scheduling note: with schedule="*/15 * * * *", Airflow's default cron
-semantics run each DAG instance *after* its interval closes (e.g. the run for
-the [12:00, 12:15) interval executes at 12:15 with logical_date=12:00). GDELT
-publishes each file a few minutes after its boundary, so by the time this DAG
-runs, the file for `logical_date` is already available -- no extra offset or
-sensor needed.
-"""
 from __future__ import annotations
 
 import logging
@@ -26,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 GDELT_BASE_URL = "http://data.gdeltproject.org/gdeltv2"
 
-# GDELT 2.0 Event table columns, in file order, per the official codebook:
 # https://data.gdeltproject.org/documentation/GDELT-Event_Codebook-V2.0.pdf
 GDELT_EVENT_COLUMNS = [
     "GlobalEventID", "Day", "MonthYear", "Year", "FractionDate",
@@ -83,7 +70,6 @@ def gdelt_export():
 
     @task
     def download(file_ts: str) -> str:
-        """Download the export zip for `file_ts`; returns the local zip path."""
         output_root = Path(Variable.get("gdelt_output_root", default="/opt/airflow/data/gdelt"))
         url = f"{GDELT_BASE_URL}/{file_ts}.export.CSV.zip"
         out_dir = output_root / file_ts
@@ -102,8 +88,6 @@ def gdelt_export():
 
     @task
     def extract_csv(zip_path: str, file_ts: str) -> str:
-        """Extract the raw CSV from the zip and prepend GDELT's real column
-        names as a header row, ready for downstream ingestion."""
         out_dir = Path(zip_path).parent
         csv_path = out_dir / f"{file_ts}.csv"
 
