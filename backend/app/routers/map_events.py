@@ -1,6 +1,3 @@
-"""File named map_events.py rather than map.py to avoid shadowing Python's
-builtin `map` in any module that imports this package's routers.
-"""
 from __future__ import annotations
 
 from elasticsearch import ConnectionError as ESConnectionError

@@ -39,7 +39,7 @@ def get_spacy_model(lang: str):
     if model_name is None:
         return None
     if lang not in _spacy_models:
-        # NER only: the rest of the default pipeline is dead weight here.
+        # NER only
         _spacy_models[lang] = spacy.load(
             model_name, exclude=["parser", "tagger", "lemmatizer", "attribute_ruler"]
         )

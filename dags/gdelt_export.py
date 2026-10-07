@@ -40,8 +40,6 @@ GDELT_EVENT_COLUMNS = [
 
 
 def gdelt_ts_for(moment: datetime) -> str:
-    """Floor `moment` to the most recent 15-minute GDELT boundary and format
-    it the way GDELT names its export files (YYYYMMDDHHMMSS)."""
     floored_minute = (moment.minute // 15) * 15
     boundary = moment.replace(minute=floored_minute, second=0, microsecond=0)
     return boundary.strftime("%Y%m%d%H%M%S")

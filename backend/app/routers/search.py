@@ -39,8 +39,6 @@ def search(
         "from": (page - 1) * page_size,
         "size": page_size,
         "_source": LIST_SOURCE_FIELDS,
-        # default caps counting at 10,000 for performance; this index is
-        # modest (~50K docs), and pagination math needs the real total.
         "track_total_hits": True,
     }
     if q and q.strip():

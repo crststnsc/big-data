@@ -330,8 +330,6 @@ def rss_entry_to_doc(entry: dict, feed: dict, batch_ts: str) -> dict | None:
         "summary": _strip_html(entry.get("summary")),
         "content": content,
         "language": _s(feed.get("language")),
-        # a feed that ships full content:encoded needs no later enrich pass;
-        # one that only gives a summary is left "pending" for that stage.
         "fetch_status": "ok" if content else "pending",
         "author": _s(entry.get("author")),
         "guid": guid,

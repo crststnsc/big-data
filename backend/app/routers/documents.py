@@ -12,11 +12,6 @@ router = APIRouter()
 
 @router.get("/api/documents/{doc_id:path}", response_model=DocumentDetail)
 def get_document(doc_id: str):
-    # doc_id is a full URL (GDELT SOURCEURL / RSS guid-or-link), so it
-    # contains "/" -- FastAPI's default path converter stops at the first
-    # "/" it sees once the incoming %2F is decoded, causing a 404 on every
-    # real id. The :path converter matches the rest of the path including
-    # slashes.
     try:
         resp = get_client().get(index=INDEX_NAME, id=doc_id)
     except NotFoundError:
