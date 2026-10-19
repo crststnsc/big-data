@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 REQUEST_TIMEOUT = 15
 MAX_WORKERS = 20
 USER_AGENT = "Mozilla/5.0 (compatible; NewsPipelineBot/1.0; +https://airflow.apache.org)"
+DEFAULT_FEEDS_FILE = Path(__file__).resolve().parent.parent / "feeds.clean.json"
 
 
 def fetch_feed(feed: dict) -> tuple[dict, list, str | None]:
@@ -48,9 +49,7 @@ def rss_export():
     def fetch_and_index(logical_date=None) -> dict:
         from news_es import bulk_index_rss_docs, rss_entry_to_doc
 
-        feeds_path = Path(
-            Variable.get("rss_feeds_file", default="/home/crst/dev/project/feeds.clean.json")
-        )
+        feeds_path = Path(Variable.get("rss_feeds_file", default=str(DEFAULT_FEEDS_FILE)))
         feeds = json.loads(feeds_path.read_text())
         batch_ts = logical_date.strftime("%Y%m%d%H%M%S")
 

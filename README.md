@@ -47,7 +47,7 @@ The timestamp always falls on `:00`, `:15`, `:30` or `:45` UTC. Each file is a z
 
 ### 2. RSS news feeds
 
-[`feeds.clean.json`](feeds.clean.json) lists **191 working RSS feeds** from national and international news outlets in **26 countries** (plus a few international outlets) and **15 languages**:
+[`feeds.clean.json`](feeds.clean.json) lists **191 working RSS feeds** from news outlets in **26 countries**, plus a few international ones, in **15 languages**:
 
 | Language | Feeds | Language | Feeds | Language | Feeds |
 |---|---|---|---|---|---|
@@ -206,7 +206,7 @@ export AIRFLOW__CORE__DAGS_FOLDER="$(pwd)/dags"
 export ES_URL=http://localhost:9200            # optional, this is the default
 
 airflow variables set gdelt_output_root "$(pwd)/data/gdelt"
-airflow variables set rss_feeds_file "$(pwd)/feeds.clean.json"
+airflow variables set rss_feeds_file "$(pwd)/feeds.clean.json"   # optional, defaults to the repo copy
 
 airflow standalone                             # UI at http://localhost:8080
 ```
@@ -236,7 +236,7 @@ npm run dev                                    # http://localhost:5173
 | `ES_URL` | env var (DAGs + backend) | `http://localhost:9200` | Elasticsearch address |
 | `NEWS_INDEX` | env var (DAGs + backend) | `news_events` | Index name |
 | `gdelt_output_root` | Airflow Variable | `/opt/airflow/data/gdelt` | Where GDELT zips/CSVs are saved |
-| `rss_feeds_file` | Airflow Variable | `/home/crst/dev/project/feeds.clean.json` | Feed list used by `rss_export` |
+| `rss_feeds_file` | Airflow Variable | `feeds.clean.json` in the repo root | Feed list used by `rss_export` |
 
 The backend's CORS settings only allow `http://localhost:5173` and `http://127.0.0.1:5173`. Change them in [`backend/app/main.py`](backend/app/main.py) if the frontend runs somewhere else.
 
