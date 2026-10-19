@@ -31,3 +31,9 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
+
+# Virtual environments
+.venv/
+
+# Downloaded data
+data/
